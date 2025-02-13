@@ -9,6 +9,13 @@ const fs = require('fs');
 const app = express();
 
 
+// CORS configuration
+app.use(cors({
+    origin: process.env.FRONTEND_URL || 'https://pemilihan.netlify.app',
+    methods: ['GET', 'POST'],
+    credentials: true
+}));
+
 
 // Create directories at the correct level
 if (!fs.existsSync(path.join(__dirname, '../uploads'))){
@@ -22,7 +29,7 @@ if (!fs.existsSync(path.join(__dirname, '../public'))){
 // Set up multer for file storage
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, path.join(__dirname, '../uploads/'))
+        cb(null, uploadDir)
     },
     filename: function (req, file, cb) {
         cb(null, Date.now() + '-' + file.originalname)
@@ -94,10 +101,7 @@ const Vote = mongoose.model('Vote', voteSchema);
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors());
-
-app.use(express.static(path.join(__dirname, '../public')));
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 
 // Routes
@@ -119,15 +123,23 @@ app.post('/api/options', upload.single('image'), async (req, res) => {
     }
 });
 
-app.get('/api/options', async (req, res) => {
+app.post('/api/options', upload.single('image'), async (req, res) => {
     try {
-        const options = await Option.find({ isActive: true });
-        res.json(options);
+        if (!req.file) {
+            return res.status(400).json({ error: 'No image uploaded' });
+        }
+
+        const option = new Option({
+            title: req.body.title,
+            imagePath: `/uploads/${req.file.filename}`
+        });
+
+        await option.save();
+        res.status(201).json(option);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
-
 app.post('/api/vote', async (req, res) => {
     try {
         const { nama, kelas, pilihan } = req.body;
